@@ -1,6 +1,178 @@
 from CovertChannelBase import CovertChannelBase
 import socket
 import time
+import hashlib
+
+def to_sec(ms):
+    return ms / 1000
+
+class Receiver:
+    sock: socket.socket
+    covert_channel: CovertChannelBase
+    burstsizes_to_signal: dict
+    def __init__(self, covert_channel, params):
+        self.covert_channel = covert_channel
+
+        self.log_file_name = params['log_file_name']
+        self.ip = params['ip']
+        self.port = params['port']
+        self.signal_order = params['signal_order']
+        self.signal_order = [str(v) for v in self.signal_order]
+        self.delay_waiting_for_burst = params['delay_waiting_for_burst']
+        self.stopping_character = params['stopping_character']
+
+    def run(self):
+        """
+        Runs the receiver to listen and process incoming bursts.
+        """
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        print("Socket created", type(self.sock))
+        self.sock.bind((self.ip, self.port))
+
+        print(f"Listening for incoming packets on {self.ip}:{self.port}...")
+        try:
+            self.receive_burst_sizes()
+            print(f"DEBUG: Received burst sizes (receiver): {self.burstsizes_to_signal}")
+            received_data = self.receive_main_data()
+            self.covert_channel.log_message(received_data, self.log_file_name)
+        except Exception as e:
+            print(f"ERROR: An exception occurred in Receiver: {e}")
+        finally:
+            self.sock.close()
+
+    def receive_burst_sizes(self):
+        self.burstsizes_to_signal = {}
+        for signal in self.signal_order:  # Wait for 3 predefined bursts
+            burst_count = 0
+            while burst_count == 0:
+                burst_count = self.receive_burst()
+            print(f"DEBUG: Received burst of size {burst_count}")
+            self.burstsizes_to_signal[burst_count] = signal
+        
+    def receive_burst(self):
+        """
+        Receives a single burst and counts the number of packets.
+        """
+        self.sock.settimeout(to_sec(self.delay_waiting_for_burst))
+        burst_count = 0
+
+        try:
+            while True:
+                self.sock.recvfrom(1024)
+                burst_count += 1
+        except socket.timeout:
+            pass
+
+        return burst_count
+
+    def receive_main_data(self):
+        """
+        Receives and decodes the covert message from UDP packets.
+        """
+        data = ""
+        byte_buffer = ""
+        while True:
+            burst_count = 0
+            while burst_count == 0:
+                burst_count = self.receive_burst()
+            decoded_signal = self.burstsizes_to_signal[burst_count]
+            byte_buffer += decoded_signal
+            if len(byte_buffer) == 8:
+                char = self.covert_channel.convert_eight_bits_to_character(byte_buffer)
+                data += char
+                if char == self.stopping_character:    
+                    break
+                byte_buffer = ""
+                print(f"DEBUG: Data: {data}")
+        return data
+
+
+class Sender:
+    sock: socket.socket
+    covert_channel: CovertChannelBase
+    signal_to_burstsize: dict
+    def __init__(self, covert_channel, params):
+        self.covert_channel = covert_channel
+        
+        self.log_file_name = params['log_file_name']
+        self.ip = params['ip']
+        self.port = params['port']
+        self.signal_order = params['signal_order']
+        self.signal_order = [str(v) for v in self.signal_order]
+        self.delay_between_bursts = params['delay_between_bursts']
+        self.send_dump_data = params['send_dump_data']
+        if isinstance(self.send_dump_data, str):
+            self.send_dump_data = self.send_dump_data.encode()
+        self.shared_secret = params['shared_secret']
+
+    def run(self):
+        """
+        Runs the sender to generate and send bursts based on hashed sizes.
+        """
+        self.sock = self.create_socket()
+        # Generate encrypted burst sizes
+        self.generate_hash_based_burst_size()
+        print(f"DEBUG: Generated bit to burst size (sender): {self.signal_to_burstsize}")
+        # Send predefined burst sizes
+        self.send_burst_sizes()
+        self.send_main_data()
+
+        self.sock.close()
+
+    def generate_hash_based_burst_size(self):
+        """
+        Generate burst sizes using timestamp and shared secret with a hash function.
+        """
+        timestamp = int(time.time())
+        input_data = f"{timestamp}{self.shared_secret}".encode()
+        hashed = input_data.decode("utf-8")
+        sizes = [0, 0, 0]
+        while sizes[0] == sizes[1] or sizes[1] == sizes[2] or sizes[0] == sizes[2]:
+            hashed = hashlib.sha256(hashed.encode()).hexdigest()
+            sizes[0] = (int(hashed[0:8], 16) % 10) + 1
+            sizes[1] = (int(hashed[8:16], 16) % 10) + 1
+            sizes[2] = (int(hashed[16:24], 16) % 10) + 1
+
+        self.signal_to_burstsize = {
+            k: v for k, v in zip(self.signal_order, sizes)
+        }
+ 
+    def create_socket(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        return sock
+    
+    def send_burst(self, burst_size):
+        """
+        Sends a single burst of packets.
+        """
+        for _ in range(burst_size):
+            self.sock.sendto(self.send_dump_data, (self.ip, self.port))
+        time.sleep(to_sec(self.delay_between_bursts))
+    
+    def send_burst_sizes(self):
+        """
+        Sends predefined burst sizes.
+        """
+        for size in self.signal_to_burstsize.values():
+            print(f"DEBUG: Sending burst of size {size}")
+            self.send_burst(size)
+
+    def send_main_data(self):
+        """
+        Sends main data.
+        """
+        message = self.covert_channel.generate_random_binary_message_with_logging(
+            log_file_name=self.log_file_name,
+            min_length=5,
+            max_length=10
+        )
+        print(f"DEBUG: Sending main data: {message} {type(message)}")
+        for signal in message:
+            size = self.signal_to_burstsize[signal]
+            print(f"DEBUG: Sending burst of size {size}")
+            self.send_burst(size)
+
+
 
 class MyCovertChannel(CovertChannelBase):
     def __init__(self):
@@ -9,156 +181,16 @@ class MyCovertChannel(CovertChannelBase):
         """
         super().__init__()
 
-    def binary_to_string(self, binary_message):
+    def send(self, **params):
         """
-        Converts a binary message (string of 0s and 1s) into a readable string using `convert_eight_bits_to_character`.
-        Each 8 bits are converted into an ASCII character.
+        Main send function.
         """
-        decoded_string = ""
-        for i in range(0, len(binary_message), 8):
-            eight_bits = binary_message[i:i + 8]
-            if len(eight_bits) == 8:  # Ensure it's a complete byte
-                decoded_string += self.convert_eight_bits_to_character(eight_bits)
-        return decoded_string
+        sender = Sender(self, params)
+        sender.run()
 
-    def send(
-            self,
-            log_file_name,
-            ip,
-            port,
-            burst_size_one,
-            burst_size_zero,
-            burst_stop_size,
-            delay_between_bursts
-            ):
+    def receive(self, **params):
         """
-        Sends a covert message using UDP packet bursting.
-        :param log_file_name: Log file to store the random message.
-        :param ip: Receiver's IP address.
-        :param port: Receiver's port.
-        :param burst_size_one: Number of packets in a burst representing binary `1`.
-        :param burst_size_zero: Number of packets in a burst representing binary `0`.
-        :param delay_between_bursts: Delay between bursts (seconds).
+        Main receive function.
         """
-        # Set parameters
-        self.burst_size_one = burst_size_one
-        self.burst_size_zero = burst_size_zero
-        self.delay_between_bursts = delay_between_bursts
-
-        # Generate a random binary message
-        binary_message = self.generate_random_binary_message_with_logging(
-            log_file_name,
-            min_length=4,
-            max_length=4
-            )
-        print(f"Binary message to send: {binary_message}")
-
-
-        # Create a UDP socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-        try:
-            for bit in binary_message:
-                if bit == '1':
-                    # Send a burst of packets for binary `1`
-                    for _ in range(self.burst_size_one):
-                        sock.sendto(b"1", (ip, port))
-                        print("DEBUG: Sent packet for '1'")
-                elif bit == '0':
-                    # Send a smaller burst of packets for binary `0`
-                    for _ in range(self.burst_size_zero):
-                        sock.sendto(b"0", (ip, port))
-                        print("DEBUG: Sent packet for '0'")
-                
-                # Delay between bursts
-                time.sleep(self.delay_between_bursts)
-
-            # Send a stop signal (special burst)
-            for _ in range(self.burst_size_zero + 1):  # Stop signal: 3 packets
-                sock.sendto(b"STOP", (ip, port))
-            print("DEBUG: Sent stop signal")
-        except Exception as e:
-            print(f"ERROR: An exception occurred in send: {e}")
-        finally:
-            sock.close()
-
-    def receive(
-            self,
-            log_file_name,
-            ip,
-            port,
-            burst_size_one,
-            burst_size_zero,
-            burst_stop_size,
-            delay_between_bursts
-            ):
-        """
-        Receives and decodes the covert message from UDP packets.
-        :param log_file_name: Log file to store the decoded message.
-        :param ip: Receiver's IP address.
-        :param port: Receiver's port.
-        :param burst_size_one: Number of packets for binary `1`.
-        :param burst_size_zero: Number of packets for binary `0`.
-        :param delay_between_bursts: Delay between bursts (seconds).
-        """
-        # Set parameters
-        self.burst_size_one = burst_size_one
-        self.burst_size_zero = burst_size_zero
-        self.delay_between_bursts = delay_between_bursts
-
-        # Bind the UDP socket to listen for incoming packets
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((ip, port))
-
-        print(f"Listening for incoming packets on {ip}:{port}...")
-
-        decoded_message = ""
-        burst_count = 0
-        is_timeout_set = False
-        stop_received = False  # Track if the stop signal is received
-
-        try:
-            while not stop_received:
-                try:
-                    # Set a timeout to differentiate bursts
-                    if not is_timeout_set:
-                        sock.settimeout(self.delay_between_bursts / 2)
-                        is_timeout_set = True
-                    data, addr = sock.recvfrom(1024)
-                    print(f"DEBUG: Received data from {addr}: {data}")
-
-                    # Check for stop signal
-                    if data == b"STOP":
-                        print("Stop signal received. Terminating reception.")
-                        stop_received = True
-                        continue
-
-                    # Increment burst count for each received packet
-                    burst_count += 1
-
-                except socket.timeout:
-                    # Timeout indicates the end of a burst
-                    if burst_count == self.burst_size_one:
-                        decoded_message += '1'
-                        print("DEBUG: Decoded bit: '1'")
-                    elif burst_count == self.burst_size_zero:
-                        decoded_message += '0'
-                        print("DEBUG: Decoded bit: '0'")
-                    elif burst_count > 0:
-                        print(f"DEBUG: Unexpected burst count: {burst_count}. Ignored.")
-
-                    # Reset burst count for the next burst
-                    burst_count = 0
-                    is_timeout_set = False
-                    # Debug current decoded message after each timeout
-                    print("Current Decoded message: ", decoded_message)
-
-        except Exception as e:
-            print(f"ERROR: An exception occurred in receive: {e}")
-        finally:
-            print(f"Final Binary Message: {decoded_message}")
-            # Convert the binary message into a string
-            decoded_string = self.binary_to_string(decoded_message)
-            print(f"Decoded Message as String: {decoded_string}")
-            self.log_message(decoded_string, log_file_name)
-            sock.close()
+        receiver = Receiver(self, params)
+        receiver.run()

@@ -5,10 +5,10 @@
       "log_file_name": "Example_UDPTimingInterarrivalChannelSender.log",
       "ip": "receiver",
       "port": 12345,
-      "burst_size_one": 5,
-      "burst_size_zero": 2,
-      "burst_stop_size": 3,
-      "delay_between_bursts": 1
+      "signal_order": [1, 0],
+      "delay_between_bursts": 100,
+      "send_dump_data": "0b00000001",
+      "shared_secret": "secret"
     }
   },
   "receive": {
@@ -16,10 +16,9 @@
       "log_file_name": "Example_UDPTimingInterarrivalChannelReceiver.log",
       "ip": "0.0.0.0",
       "port": 12345,
-      "burst_size_one": 5,
-      "burst_size_zero": 2,
-      "burst_stop_size": 3,
-      "delay_between_bursts": 1
+      "signal_order": [1, 0],
+      "delay_waiting_for_burst": 50,
+      "stopping_character": "."
     }
   }
 }
