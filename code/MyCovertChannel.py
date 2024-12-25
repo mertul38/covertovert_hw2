@@ -1,10 +1,18 @@
 from CovertChannelBase import CovertChannelBase
 import socket
 import time
+import random
 import hashlib
+from scapy.all import IP, UDP, Raw
 
 def to_sec(ms):
     return ms / 1000
+
+def createUDPPacket(ip, port, data):
+    """
+    Creates a UDP packet using the given destination IP, port, and payload data.
+    """
+    return IP(dst=ip) / UDP(dport=port) / Raw(data)
 
 class Receiver:
     sock: socket.socket
@@ -86,7 +94,6 @@ class Receiver:
                 print(f"DEBUG: Data: {data}")
         return data
 
-
 class Sender:
     sock: socket.socket
     covert_channel: CovertChannelBase
@@ -125,18 +132,15 @@ class Sender:
         """
         timestamp = int(time.time())
         input_data = f"{timestamp}{self.shared_secret}".encode()
-        hashed = input_data.decode("utf-8")
-        sizes = [0, 0, 0]
-        while sizes[0] == sizes[1] or sizes[1] == sizes[2] or sizes[0] == sizes[2]:
-            hashed = hashlib.sha256(hashed.encode()).hexdigest()
-            sizes[0] = (int(hashed[0:8], 16) % 10) + 1
-            sizes[1] = (int(hashed[8:16], 16) % 10) + 1
-            sizes[2] = (int(hashed[16:24], 16) % 10) + 1
+        hashed = hashlib.sha256(input_data).hexdigest()
+        sizes = [(int(hashed[i:i+8], 16) % 10) + 1 for i in range(0, 24, 8)]
 
-        self.signal_to_burstsize = {
-            k: v for k, v in zip(self.signal_order, sizes)
-        }
- 
+        while len(set(sizes)) != len(sizes):
+            hashed = hashlib.sha256(hashed.encode()).hexdigest()
+            sizes = [(int(hashed[i:i+8], 16) % 10) + 1 for i in range(0, 24, 8)]
+
+        self.signal_to_burstsize = {k: v for k, v in zip(self.signal_order, sizes)}
+
     def create_socket(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         return sock
@@ -146,7 +150,8 @@ class Sender:
         Sends a single burst of packets.
         """
         for _ in range(burst_size):
-            self.sock.sendto(self.send_dump_data, (self.ip, self.port))
+            packet = createUDPPacket(self.ip, self.port, self.send_dump_data)
+            CovertChannelBase.send(self.covert_channel, packet)
         time.sleep(to_sec(self.delay_between_bursts))
     
     def send_burst_sizes(self):
@@ -171,8 +176,6 @@ class Sender:
             size = self.signal_to_burstsize[signal]
             print(f"DEBUG: Sending burst of size {size}")
             self.send_burst(size)
-
-
 
 class MyCovertChannel(CovertChannelBase):
     def __init__(self):
