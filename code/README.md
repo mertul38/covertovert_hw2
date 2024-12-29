@@ -190,29 +190,31 @@ The `Sender` class sends covert messages as bursts of UDP packets. Each burst re
 ### Receiver Parameters
 ```python
 {
-    'log_file_name': 'receiver_log.txt',
-    'ip': '127.0.0.1',
-    'port': 12345,
-    'signal_order': [0, 1],
-    'delay_waiting_for_burst': 200,
-    'stopping_character': '\0',
-    'shared_secret': 'mysecret',
-    'burst_max': 10,
-    'socket_awakening_delay': 100
+    "log_file_name": "Example_UDPTimingInterarrivalChannelReceiver.log",
+    "ip": "0.0.0.0",
+    "port": 12345,
+    "signal_order": [1, 0],
+    "stopping_character": ".",
+    "shared_secret": "secret",
+    "delay_waiting_for_burst": 50,
+    "socket_awakening_delay": 30,
+    "burst_max": 3,
+    "history_size": 4
 }
 ```
 
 ### Sender Parameters
 ```python
 {
-    'log_file_name': 'sender_log.txt',
-    'ip': '127.0.0.1',
-    'port': 12345,
-    'signal_order': [0, 1],
-    'delay_between_bursts': 0.2,
-    'send_dump_data': 'test',
-    'shared_secret': 'mysecret',
-    'burst_max': 10
+    "log_file_name": "Example_UDPTimingInterarrivalChannelSender.log",
+    "ip": "receiver",
+    "port": 12345,
+    "signal_order": [1, 0],
+    "send_dump_data": "0b00000001",
+    "shared_secret": "secret",
+    "delay_between_bursts": 65,
+    "burst_max": 3,
+    "history_size": 4
 }
 ```
 
