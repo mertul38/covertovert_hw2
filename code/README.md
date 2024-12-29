@@ -15,6 +15,8 @@ The UDP covert channel consists of three main components:
 2. **MyCovertChannel**: The main class that integrates both the sender and receiver logic and provides utilities for message conversion and burst size generation.
 3. **Sender and Receiver**: These handle sending and receiving messages using bursts of UDP packets.
 
+### Covert Channel Capacity: 9.27 bits per second
+
 ---
 
 ## MyCovertChannel Class
@@ -152,13 +154,29 @@ The `Sender` class sends covert messages as bursts of UDP packets. Each burst re
 
 ---
 
+
+
 ## Utilities
 
-### Burst Size Regeneration
+### Burst Size Generation
 
-- Burst sizes are dynamically adjusted based on the ASCII sum of the message history.
-- Even sum: Subtract 1 from each burst size.
-- Odd sum: Add 1 to each burst size.
+- The burst sizes are generated and sent to the receiver by the sender before the target data transmission begins.
+- The burst sizes are determined using:
+  - A timestamp.
+  - A shared secret value.
+- The burst sizes are constrained within the range `[1, burst_size_max)`.
+- The minimum allowable value for `burst_size_max` is 3 to ensure distinguishable and one additional burst sizes as 1,2 or 3.
+- During the transmission of main data:
+  - Burst sizes are regenerated after each byte is sent or received.
+  - Regeneration uses the last `history_size` characters of the transmitted or received data.
+  - The ASCII values of these characters are summed, and the result modulo 2 determines the adjustment:
+    - If the sum is even, each burst size is decremented by 1.
+    - If the sum is odd, each burst size is incremented by 1.
+  - The adjusted burst sizes are taken modulo `burst_size_max` to ensure they remain within the valid range.
+
+- 'delay_between_bursts' and 'delay_waiting_for_burst' are determined based on chose 'burst_size_max'. For example, if 'burst_size_max' is 3, the maximum available burst size is 3. Receiver starts the waiting timer after first message, so the remaining 2 messages will take time. Estimated arrival time between two packet is 20ms, so 2 messages making 40ms.For safety, we put 10ms and get the 50ms 'delay_waiting_for_burst'.
+- To calculate 'delay_between_bursts', we can add spending time for remaining operations to 'delay_waiting_for_burst'. We add 15ms for safety and get 65ms for 'delay_between_bursts'.
+- The bigger 'burst_size_max' value results in bigger delay values. However, it provides harder encryption to resolve.
 
 ### Message Conversion
 

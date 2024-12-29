@@ -9,7 +9,8 @@
       "send_dump_data": "0b00000001",
       "shared_secret": "secret",
       "delay_between_bursts": 65,
-      "burst_max": 3
+      "burst_max": 3,
+      "history_size": 4
     }
   },
   "receive": {
@@ -20,10 +21,10 @@
       "signal_order": [1, 0],
       "stopping_character": ".",
       "shared_secret": "secret",
-      "delay_waiting_for_burst": 55,
+      "delay_waiting_for_burst": 50,
       "socket_awakening_delay": 30,
-      "burst_max": 3
-
+      "burst_max": 3,
+      "history_size": 4
     }
   }
 }

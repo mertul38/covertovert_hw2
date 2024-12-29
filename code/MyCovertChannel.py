@@ -40,12 +40,13 @@ class MyCovertChannel(CovertChannelBase):
         """
         return ''.join(chr(int(binary_message[i:i+8], 2)) for i in range(0, len(binary_message), 8))
 
-    def regenerate_burst_sizes(self, burst_sizes, hist, burst_max):
+    def regenerate_burst_sizes(self, burst_sizes, hist, burst_max, history_size):
         """
         - It regenerates the burst sizes based on the history of the message.
         - It sums up the ASCII values of the characters in the history.
         - If the sum is even, it adds -1 to the burst sizes. Otherwise, it adds 1.
         """
+        hist = hist[-history_size:]
         ords = [ord(c) for c in hist]
         sum_ords = sum(ords)
         check = sum_ords % 2
@@ -97,6 +98,7 @@ class Receiver:
         self.shared_secret = params['shared_secret']
         self.burst_max = params['burst_max']
         self.socket_awakening_delay = params['socket_awakening_delay']
+        self.history_size = params['history_size']
 
     def run(self):
 
@@ -110,7 +112,7 @@ class Receiver:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((self.ip, self.port))
 
-        print(f"Listening for incoming packets on {self.ip}:{self.port}...")
+        # print(f"Listening for incoming packets on {self.ip}:{self.port}...")
         try:
             self.receive_burst_sizes()
             received_data = self.receive_main_data()
@@ -157,8 +159,9 @@ class Receiver:
                         # print("DEBUG: Socket timeout")
                         continue
             except Exception as e:
-                print(f"DEBUG: Collector stopped due to: {e}")
-            print("collector stopped", txs, tys)
+                pass
+                # print(f"DEBUG: Collector stopped due to: {e}")
+            # print("collector stopped", txs, tys)
         def timer():
             """
             Timer thread to stop collection after a fixed timeout.
@@ -197,7 +200,7 @@ class Receiver:
                 burst_count = self.receive_burst()
             self.burstsizes_to_signal[burst_count] = signal
         
-        print(f"DEBUG: Received burst_sizes_to_signal: {self.burstsizes_to_signal}")
+        # print(f"DEBUG: Received burst_sizes_to_signal: {self.burstsizes_to_signal}")
 
     def receive_byte(self):
         """
@@ -243,12 +246,13 @@ class Receiver:
             # Check if we have reached the stopping character
             if char == self.stopping_character:    
                 break
-            print(f"DEBUG: Current Data: {received_data}")
+            # print(f"DEBUG: Current Data: {received_data}")
             # Regenerate the burst sizes dictionary based on the current data
             burst_sizes = self.covert_channel.regenerate_burst_sizes(
                 list(self.burstsizes_to_signal.keys()),
                 received_data,
-                self.burst_max
+                self.burst_max,
+                self.history_size
                 )
             # Update the burst sizes dictionary
             self.burstsizes_to_signal = {k: v for k, v in zip(burst_sizes, self.signal_order)}
@@ -289,6 +293,7 @@ class Sender:
             self.send_dump_data = self.send_dump_data.encode()
         self.shared_secret = params['shared_secret']
         self.burst_max = params['burst_max']
+        self.history_size = params['history_size']
 
     def run(self):
 
@@ -299,9 +304,7 @@ class Sender:
 
         """
         self.sock = self.create_socket()
-        # Generate encrypted burst sizes
         self.generate_hash_based_burst_size()
-        # Send predefined burst sizes
         self.send_burst_sizes()
         self.send_main_data()
 
@@ -327,7 +330,7 @@ class Sender:
             sizes = [(int(hashed[i:i+8], 16) % self.burst_max) + 1 for i in range(0, 24, 8)]
 
         self.signal_to_burstsize = {k: v for k, v in zip(self.signal_order, sizes)}
-        print(f"DEBUG: Generated signal_to_burstsize: {self.signal_to_burstsize}")
+        # print(f"DEBUG: Generated signal_to_burstsize: {self.signal_to_burstsize}")
 
     def create_socket(self):
         """
@@ -377,15 +380,20 @@ class Sender:
         """
         message = self.covert_channel.generate_random_binary_message_with_logging(
             log_file_name=self.log_file_name,
-            min_length=5,
-            max_length=10
+            min_length=16,
+            max_length=16
         )
         message_str = self.covert_channel.convert_binary_message_to_string(message)
-        print(f"DEBUG: Sending main data: \n{message}\nString: {message_str}")
+        # print(f"DEBUG: Sending main data: \n{message}\nString: {message_str}")
         byte_clock = 0
+        start_time = time.time()
         for index, signal in enumerate(message):
             size = self.signal_to_burstsize[signal]
             self.send_burst(size)
+            if index == len(message) - 1:
+                end_time = time.time()
+                total_time = end_time - start_time
+                # print(f"DEBUG: Time taken to send main data: {total_time}")
             byte_clock += 1
             if byte_clock == 8:
                 byte_clock = 0
@@ -394,8 +402,9 @@ class Sender:
                 burst_sizes = self.covert_channel.regenerate_burst_sizes(
                     list(self.signal_to_burstsize.values()),
                     hist,
-                    self.burst_max
+                    self.burst_max,
+                    self.history_size
                 )
                 self.signal_to_burstsize = {k: v for k, v in zip(self.signal_order, burst_sizes)}
-                print(f"DEBUG: Updated burst sizes: {self.signal_to_burstsize} using hist: {hist}")
+                # print(f"DEBUG: Updated burst sizes: {self.signal_to_burstsize} using hist: {hist}")
                 # input("Press enter to continue...")
