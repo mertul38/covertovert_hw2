@@ -6,9 +6,10 @@
       "ip": "receiver",
       "port": 12345,
       "signal_order": [1, 0],
-      "delay_between_bursts": 100,
       "send_dump_data": "0b00000001",
-      "shared_secret": "secret"
+      "shared_secret": "secret",
+      "delay_between_bursts": 65,
+      "burst_max": 3
     }
   },
   "receive": {
@@ -17,8 +18,12 @@
       "ip": "0.0.0.0",
       "port": 12345,
       "signal_order": [1, 0],
-      "delay_waiting_for_burst": 50,
-      "stopping_character": "."
+      "stopping_character": ".",
+      "shared_secret": "secret",
+      "delay_waiting_for_burst": 55,
+      "socket_awakening_delay": 30,
+      "burst_max": 3
+
     }
   }
 }
