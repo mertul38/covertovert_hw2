@@ -6,8 +6,14 @@
 Covert Channel documentation
 ============================
 
-Please add your names, group ID, and your link to the forked public repository here by editing `index.rst` in the docs folder.
 
+* Name: Mert Uludogan
+* ID: 2380996
+* Name: Mert Eren
+* ID: 2442978
+
+* Group ID: 78
+* Repository Link: `https://github.com/mertul38/covertovert_hw2`
 
 .. toctree::
    :maxdepth: 2
