@@ -174,9 +174,16 @@ The `Sender` class sends covert messages as bursts of UDP packets. Each burst re
     - If the sum is odd, each burst size is incremented by 1.
   - The adjusted burst sizes are taken modulo `burst_size_max` to ensure they remain within the valid range.
 
-- 'delay_between_bursts' and 'delay_waiting_for_burst' are determined based on chose 'burst_size_max'. For example, if 'burst_size_max' is 3, the maximum available burst size is 3. Receiver starts the waiting timer after first message, so the remaining 2 messages will take time. Estimated arrival time between two packet is 20ms, so 2 messages making 40ms.For safety, we put 10ms and get the 50ms 'delay_waiting_for_burst'.
-- To calculate 'delay_between_bursts', we can add spending time for remaining operations to 'delay_waiting_for_burst'. We add 15ms for safety and get 65ms for 'delay_between_bursts'.
-- The bigger 'burst_size_max' value results in bigger delay values. However, it provides harder encryption to resolve.
+- The `delay_between_bursts` and `delay_waiting_for_burst` are determined based on the chosen `burst_size_max`. For example, if `burst_size_max` is 3, the maximum available burst size is 3. The receiver starts the waiting timer after receiving the first message, so the remaining 2 messages will take additional time. Assuming an estimated arrival time of 20ms between two packets, 2 messages would take 40ms. To ensure stability, we add a safety margin of 10ms, resulting in a `delay_waiting_for_burst` of 50ms.
+  
+- To calculate `delay_between_bursts`, we account for the time required for additional operations and add it to the `delay_waiting_for_burst`. By adding 15ms for safety, we arrive at a `delay_between_bursts` of 65ms.
+
+- A larger `burst_size_max` results in higher delay values. However, it also increases the complexity of encryption, making it harder to decipher.
+
+- The `socket_awakening_delay` is used to wake up the socket from the `recvfrom` function. It is set to a value slightly larger than the estimated packet arrival time (20ms). By adding a safety margin of 10ms, we set the `socket_awakening_delay` to 30ms.
+
+- The safety margins are relatively high because, during testing, we observed occasional exceptions where the arrival time for a single packet was as high as 27ms. We assume and hope these safety values will ensure stable operation.
+
 
 ### Message Conversion
 
